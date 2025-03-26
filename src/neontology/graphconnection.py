@@ -2,8 +2,17 @@ from __future__ import annotations
 
 import logging
 import os
-from typing import TYPE_CHECKING, Any, List, Optional
 from warnings import warn
+
+from typing_extensions import (
+    TYPE_CHECKING,
+    Any,
+    List,
+    LiteralString,
+    Optional,
+    TypeVar,
+    cast,
+)
 
 from .graphengines import MemgraphConfig, Neo4jConfig
 from .graphengines.graphengine import GraphEngineBase, GraphEngineConfig
@@ -14,6 +23,9 @@ if TYPE_CHECKING:
     from .baserelationship import BaseRelationship
 
 logger = logging.getLogger(__name__)
+
+
+Node = TypeVar("Node", bound="BaseNode")
 
 
 class GraphConnection(object):
@@ -90,7 +102,7 @@ class GraphConnection(object):
         cls._instance.engine = config.engine(config)
 
     def evaluate_query_single(self, cypher: str, params: dict = {}) -> Optional[Any]:
-        return self.engine.evaluate_query_single(cypher, params)
+        return self.engine.evaluate_query_single(cast(LiteralString, cypher), params)
 
     def evaluate_query(
         self,
@@ -114,25 +126,25 @@ class GraphConnection(object):
             relationship_classes = self.global_rels
 
         return self.engine.evaluate_query(
-            cypher, params, node_classes, relationship_classes
+            cast(LiteralString, cypher), params, node_classes, relationship_classes
         )
 
     def create_nodes(
-        self, labels: list, pp_key: str, properties: list, node_class: type["BaseNode"]
-    ) -> List["BaseNode"]:
+        self, labels: list, pp_key: str, properties: list, node_class: type[Node]
+    ) -> List[Node]:
         return self.engine.create_nodes(labels, pp_key, properties, node_class)
 
     def merge_nodes(
-        self, labels: list, pp_key: str, properties: list, node_class: type["BaseNode"]
-    ) -> List["BaseNode"]:
+        self, labels: list, pp_key: str, properties: list, node_class: type[Node]
+    ) -> List[Node]:
         return self.engine.merge_nodes(labels, pp_key, properties, node_class)
 
     def match_nodes(
         self,
-        node_class: type["BaseNode"],
+        node_class: type[Node],
         limit: Optional[int] = None,
         skip: Optional[int] = None,
-    ) -> List["BaseNode"]:
+    ) -> List[Node]:
         return self.engine.match_nodes(node_class, limit, skip)
 
     def match_relationships(

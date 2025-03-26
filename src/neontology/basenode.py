@@ -1,7 +1,20 @@
+from __future__ import annotations
+
 import functools
 import json
 import warnings
-from typing import Any, Callable, ClassVar, Dict, List, Optional, Tuple, Union
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Callable,
+    ClassVar,
+    Dict,
+    List,
+    Optional,
+    Tuple,
+    TypeVar,
+    Union,
+)
 
 import pandas as pd
 from pydantic import ValidationError, model_validator
@@ -9,7 +22,19 @@ from pydantic import ValidationError, model_validator
 from .commonmodel import CommonModel
 from .gql import gql_identifier_adapter, int_adapter
 from .graphconnection import GraphConnection
+from .result import NeontologyResult
 from .schema_utils import NodeSchema, SchemaProperty, extract_type_mapping
+
+from typing_extensions import (
+    ParamSpec,
+    Self,
+)
+
+
+# BaseNodeT = TypeVar("BaseNodeT", bound=BaseNode,)
+
+P = ParamSpec("P")
+R = TypeVar("R")
 
 
 def _find_this_node(query, params, node):
@@ -21,7 +46,7 @@ def _find_this_node(query, params, node):
 
 
 def _prepare_related_query(
-    node: "BaseNode", wrapped_function: Callable, *args: Any, **kwargs: Any
+    node: BaseNode, wrapped_function: Callable, *args: Any, **kwargs: Any
 ) -> Tuple[str, dict]:
     try:
         query, params = wrapped_function(node, *args, **kwargs)
@@ -41,11 +66,11 @@ def _prepare_related_query(
     return new_query, params
 
 
-def related_property(f: Callable) -> Callable:
+def related_property(f: Callable[P, R]) -> Callable:
     """Decorator to wrap functions on BaseNode subclasses and return a single result."""
 
     @functools.wraps(f)
-    def wrapper(self: "BaseNode", *args: Any, **kwargs: Any) -> Optional[Any]:
+    def wrapper(self: BaseNode, *args: P.args, **kwargs: P.kwargs) -> Optional[Any]:
         new_query, params = _prepare_related_query(self, f, *args, **kwargs)
 
         gc = GraphConnection()
@@ -53,16 +78,16 @@ def related_property(f: Callable) -> Callable:
 
         return result
 
-    wrapper.neontology_related_prop = True
+    wrapper.neontology_related_prop = True  # type: ignore
 
     return wrapper
 
 
-def related_nodes(f: Callable) -> Callable:
+def related_nodes(f: Callable[P, R]) -> Callable:
     """Decorator to wrap functions on BaseNode subclasses and return a list of nodes."""
 
     @functools.wraps(f)
-    def wrapper(self: "BaseNode", *args: Any, **kwargs: Any) -> List["BaseNode"]:
+    def wrapper(self: BaseNode, *args: P.args, **kwargs: P.kwargs) -> List[BaseNode]:
         new_query, params = _prepare_related_query(self, f, *args, **kwargs)
 
         gc = GraphConnection()
@@ -70,7 +95,7 @@ def related_nodes(f: Callable) -> Callable:
 
         return result.nodes
 
-    wrapper.neontology_related_nodes = True
+    wrapper.neontology_related_nodes = True  # type: ignore
 
     return wrapper
 
@@ -143,7 +168,7 @@ class BaseNode(CommonModel):  # pyre-ignore[13]
         return related_prop_attributes
 
     @model_validator(mode="after")
-    def validate_identifiers(self) -> "BaseNode":
+    def validate_identifiers(self) -> Self:
         try:
             gql_identifier_adapter.validate_strings(self.__primarylabel__)
 
@@ -178,7 +203,7 @@ class BaseNode(CommonModel):  # pyre-ignore[13]
         warnings.warn(("get_primary_property_value is deprecated, use get_pp instead."))
         return self.get_pp()
 
-    def create(self) -> "BaseNode":
+    def create(self) -> Self:
         """Create this node in the graph."""
 
         # pp = self.get_pp()
@@ -202,7 +227,7 @@ class BaseNode(CommonModel):  # pyre-ignore[13]
 
         return results[0]
 
-    def merge(self) -> List["BaseNode"]:
+    def merge(self) -> List[Self]:
         """Merge this node into the graph."""
 
         node_list = [self._get_merge_parameters()]
@@ -218,7 +243,7 @@ class BaseNode(CommonModel):  # pyre-ignore[13]
         return results
 
     @classmethod
-    def create_nodes(cls, nodes: List["BaseNode"]) -> List["BaseNode"]:
+    def create_nodes(cls, nodes: List[Self]) -> List[Self]:
         """Create the given nodes in the database.
 
         Args:
@@ -246,7 +271,7 @@ class BaseNode(CommonModel):  # pyre-ignore[13]
         return results
 
     @classmethod
-    def merge_nodes(cls, nodes: List["BaseNode"]) -> List["BaseNode"]:
+    def merge_nodes(cls, nodes: List[Self]) -> List[Self]:
         """Merge multiple nodes into the database.
 
         Args:
@@ -272,7 +297,7 @@ class BaseNode(CommonModel):  # pyre-ignore[13]
         return results
 
     @classmethod
-    def merge_records(cls, records: List[dict]) -> List["BaseNode"]:
+    def merge_records(cls, records: List[dict]) -> List[Self]:
         """Take a list of dictionaries and use them to merge in nodes in the graph.
 
         Each dictionary will be used to merge a node where dictionary key/value pairs
@@ -340,7 +365,7 @@ class BaseNode(CommonModel):  # pyre-ignore[13]
         return ordered_nodes
 
     @classmethod
-    def match(cls, pp: str) -> Optional["BaseNode"]:
+    def match(cls, pp: str) -> Optional[Self]:
         """MATCH a single node of this type with the given primary property.
 
         Args:
@@ -396,7 +421,7 @@ class BaseNode(CommonModel):  # pyre-ignore[13]
     @classmethod
     def match_nodes(
         cls, limit: Optional[int] = None, skip: Optional[int] = None
-    ) -> List["BaseNode"]:
+    ) -> List[Self]:
         """Get nodes of this type from the database.
 
         Run a MATCH cypher query to retrieve any Nodes with the label of this class.
@@ -425,7 +450,7 @@ class BaseNode(CommonModel):  # pyre-ignore[13]
         limit: Optional[int] = None,
         skip: Optional[int] = None,
         distinct: bool = False,
-    ) -> tuple:
+    ) -> NeontologyResult:
         if target_label:
             target = f"o:{gql_identifier_adapter.validate_strings(target_label)}"
         else:
@@ -514,7 +539,7 @@ class BaseNode(CommonModel):  # pyre-ignore[13]
         return dumped_model
 
     def neontology_dump(
-        self, exclude: Optional[set] = None, exclude_none: bool = True, **kwargs
+        self, exclude: Optional[set[str]] = None, exclude_none: bool = True, **kwargs
     ) -> dict:
         dumped_model = self.model_dump(
             exclude_none=exclude_none, exclude=exclude, **kwargs
@@ -523,7 +548,7 @@ class BaseNode(CommonModel):  # pyre-ignore[13]
         return self._prep_dump_dict(dumped_model)
 
     def neontology_dump_json(
-        self, exclude: Optional[set] = None, exclude_none: bool = True, **kwargs
+        self, exclude: Optional[set[str]] = None, exclude_none: bool = True, **kwargs
     ) -> str:
         # pydantic converts values to be json serializable, make use of this first
         original_json = self.model_dump_json(

@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 from datetime import date, datetime, time, timedelta
-from typing import TYPE_CHECKING, Any, ClassVar, Dict, List, Optional
-
+from typing import TYPE_CHECKING, Any, ClassVar, Dict, List, Optional, TypeVar
+from typing_extensions import LiteralString, cast
 from pydantic import BaseModel
 
 from ..gql import gql_identifier_adapter, int_adapter
@@ -11,6 +11,9 @@ from ..result import NeontologyResult
 if TYPE_CHECKING:
     from ..basenode import BaseNode
     from ..baserelationship import BaseRelationship
+
+
+Node = TypeVar("Node", bound="BaseNode")
 
 
 class GraphEngineBase:
@@ -90,14 +93,16 @@ class GraphEngineBase:
 
     def evaluate_query(
         self,
-        cypher: str,
+        cypher: LiteralString,
         params: Dict[str, Any] = {},
         node_classes: dict = {},
         relationship_classes: dict = {},
     ) -> NeontologyResult:
         raise NotImplementedError
 
-    def evaluate_query_single(self, cypher: str, params: Dict[str, Any]) -> Any:
+    def evaluate_query_single(
+        self, cypher: LiteralString, params: Dict[str, Any]
+    ) -> Any:
         raise NotImplementedError
 
     def apply_constraint(self, label: str, property: str) -> None:
@@ -110,8 +115,8 @@ class GraphEngineBase:
         raise NotImplementedError
 
     def create_nodes(
-        self, labels: list, pp_key: str, properties: list, node_class: type["BaseNode"]
-    ) -> List["BaseNode"]:
+        self, labels: list, pp_key: str, properties: list, node_class: type[Node]
+    ) -> List[Node]:
         """
         Args:
             labels (list): a list of labels to give created nodes
@@ -137,13 +142,13 @@ class GraphEngineBase:
 
         node_classes = {node_class.__primarylabel__: node_class}
 
-        results = self.evaluate_query(cypher, params, node_classes)
+        results = self.evaluate_query(cast(LiteralString, cypher), params, node_classes)
 
         return results.nodes
 
     def merge_nodes(
-        self, labels: list, pp_key: str, properties: list, node_class: type["BaseNode"]
-    ) -> List["BaseNode"]:
+        self, labels: list, pp_key: str, properties: list, node_class: type[Node]
+    ) -> List[Node]:
         """_summary_
 
         Args:
@@ -172,7 +177,7 @@ class GraphEngineBase:
 
         node_classes = {node_class.__primarylabel__: node_class}
 
-        results = self.evaluate_query(cypher, params, node_classes)
+        results = self.evaluate_query(cast(LiteralString, cypher), params, node_classes)
 
         return results.nodes
 
@@ -186,7 +191,7 @@ class GraphEngineBase:
 
         params = {"pp_values": pp_values}
 
-        self.evaluate_query_single(cypher, params)
+        self.evaluate_query_single(cast(LiteralString, cypher), params)
 
     def merge_relationships(
         self,
@@ -220,14 +225,14 @@ class GraphEngineBase:
 
         params = {"rel_list": rel_props}
 
-        self.evaluate_query_single(cypher, params)
+        self.evaluate_query_single(cast(LiteralString, cypher), params)
 
     def match_nodes(
         self,
-        node_class: type["BaseNode"],
+        node_class: type[Node],
         limit: Optional[int] = None,
         skip: Optional[int] = None,
-    ) -> List["BaseNode"]:
+    ) -> List[Node]:
         """Get nodes of this type from the database.
 
         Run a MATCH cypher query to retrieve any Nodes with the label of this class.
@@ -256,7 +261,9 @@ class GraphEngineBase:
             params["limit"] = int_adapter.validate_python(limit)
 
         result = self.evaluate_query(
-            cypher, params, node_classes={node_class.__primarylabel__: node_class}
+            cast(LiteralString, cypher),
+            params,
+            node_classes={node_class.__primarylabel__: node_class},
         )
 
         return result.nodes
@@ -300,7 +307,7 @@ class GraphEngineBase:
         node_classes = get_node_types()
 
         result = self.evaluate_query(
-            cypher,
+            cast(LiteralString, cypher),
             params,
             node_classes=node_classes,
             relationship_classes=rel_types,

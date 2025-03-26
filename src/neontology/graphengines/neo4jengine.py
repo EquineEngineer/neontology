@@ -1,7 +1,6 @@
 import itertools
 import os
 import warnings
-from typing import TYPE_CHECKING, Any, ClassVar, Dict, List, Optional
 
 from dotenv import load_dotenv
 from neo4j import GraphDatabase
@@ -14,6 +13,16 @@ from neo4j.time import Date as Neo4jDate
 from neo4j.time import DateTime as Neo4jDateTime
 from neo4j.time import Time as Neo4jTime
 from pydantic import model_validator
+from typing_extensions import (
+    TYPE_CHECKING,
+    Any,
+    ClassVar,
+    Dict,
+    List,
+    LiteralString,
+    Optional,
+    cast,
+)
 
 from ..gql import gql_identifier_adapter
 from ..result import NeontologyResult
@@ -193,12 +202,12 @@ class Neo4jEngine(GraphEngineBase):
 
     def evaluate_query(
         self,
-        cypher: str,
+        cypher: LiteralString,
         params: dict = {},
         node_classes: dict = {},
         relationship_classes: dict = {},
     ) -> NeontologyResult:
-        result = self.driver.execute_query(cypher, parameters_=params)
+        result = self.driver.execute_query(cypher, parameters=params)
 
         neo4j_records = result.records
         neontology_records, nodes, rels, paths = neo4j_records_to_neontology_records(
@@ -213,8 +222,10 @@ class Neo4jEngine(GraphEngineBase):
             paths=paths,
         )
 
-    def evaluate_query_single(self, cypher: str, params: dict = {}) -> Optional[Any]:
-        result = self.driver.execute_query(
+    def evaluate_query_single(
+        self, cypher: LiteralString, params: dict = {}
+    ) -> Optional[Any]:
+        result: Optional[Neo4jRecord] = self.driver.execute_query(
             cypher, parameters_=params, result_transformer_=Neo4jResult.single
         )
 
@@ -231,13 +242,13 @@ class Neo4jEngine(GraphEngineBase):
         REQUIRE n.{gql_identifier_adapter.validate_strings(property)} IS UNIQUE
         """
 
-        self.evaluate_query_single(cypher)
+        self.evaluate_query_single(cast(LiteralString, cypher))
 
     def drop_constraint(self, constraint_name: str) -> None:
         drop_cypher = f"""
         DROP CONSTRAINT {gql_identifier_adapter.validate_strings(constraint_name)}
         """
-        self.evaluate_query_single(drop_cypher)
+        self.evaluate_query_single(cast(LiteralString, drop_cypher))
 
     def get_constraints(self) -> list:
         get_constraints_query = """
@@ -255,7 +266,7 @@ class Neo4jEngine(GraphEngineBase):
 
 
 class Neo4jConfig(GraphEngineConfig):
-    engine: ClassVar[type[Neo4jEngine]] = Neo4jEngine
+    engine: ClassVar[type[GraphEngineBase]] = Neo4jEngine
     uri: str
     username: str
     password: str

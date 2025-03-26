@@ -40,6 +40,11 @@ def generate_relationship_type_data(rel_class: Type[BaseRelationship]):
     defined_source_class = rel_class.model_fields["source"].annotation
     defined_target_class = rel_class.model_fields["target"].annotation
 
+    if not defined_source_class or not defined_target_class:
+        raise ValueError(
+            f"Relationship {rel_class.__name__} must have source and target classes defined."
+        )
+
     all_source_classes = list(get_node_types(defined_source_class).values())
     all_target_classes = list(get_node_types(defined_target_class).values())
 

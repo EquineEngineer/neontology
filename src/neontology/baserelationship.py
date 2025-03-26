@@ -1,8 +1,20 @@
+from __future__ import annotations
+
 import itertools
 import json
 import warnings
-from typing import Any, ClassVar, Dict, List, Optional, Type, TypeVar
-
+from typing import (
+    Any,
+    ClassVar,
+    Dict,
+    Generic,
+    Hashable,
+    List,
+    Optional,
+    Sequence,
+    Type,
+    TypeVar,
+)
 
 import pandas as pd
 from pydantic import BaseModel, PrivateAttr, ValidationError, model_validator
@@ -15,11 +27,13 @@ from .gql import gql_identifier_adapter
 from .schema_utils import RelationshipSchema, SchemaProperty, extract_type_mapping
 
 R = TypeVar("R", bound="BaseRelationship")
+S = TypeVar("S", bound="BaseNode")
+T = TypeVar("T", bound="BaseNode")
 
 
-class BaseRelationship(CommonModel):  # pyre-ignore[13]
-    source: BaseNode
-    target: BaseNode
+class BaseRelationship(CommonModel, Generic[S, T]):  # pyre-ignore[13]
+    source: S
+    target: T
 
     __relationshiptype__: ClassVar[Optional[str]] = None
 
@@ -225,7 +239,7 @@ class BaseRelationship(CommonModel):  # pyre-ignore[13]
     @classmethod
     def merge_records(
         cls: Type[R],
-        records: List[Dict[str, Any]],
+        records: Sequence[Dict[Hashable, Any]],
         source_type: Optional[Type[BaseNode]] = None,
         target_type: Optional[Type[BaseNode]] = None,
         source_prop: Optional[str] = None,
@@ -272,7 +286,15 @@ class BaseRelationship(CommonModel):  # pyre-ignore[13]
                 **{target_prop: record["target"]}
             )
 
-            hydrated_list.append(cls(**hydrated))
+            hydrated_list.append(
+                cls(
+                    **{
+                        key: value
+                        for key, value in hydrated.items()
+                        if type(key) is str
+                    }
+                )
+            )
 
         cls.merge_relationships(
             hydrated_list,
@@ -302,7 +324,9 @@ class BaseRelationship(CommonModel):  # pyre-ignore[13]
 
         if df.empty is False:
             cleaned_df = df.mask(pd.isna(df), None).copy()
+
             records = cleaned_df.to_dict(orient="records")
+
             cls.merge_records(
                 records,
                 source_type=source_type,
@@ -329,7 +353,7 @@ class BaseRelationship(CommonModel):  # pyre-ignore[13]
         result = gc.evaluate_query_single(cypher)
         return result
 
-    def _prep_dump_dict(self, dumped_model: dict, exclude_node_props: True) -> dict:
+    def _prep_dump_dict(self, dumped_model: dict, exclude_node_props: bool) -> dict:
         if exclude_node_props is True:
             dumped_model["source"] = self.source.get_pp()
             dumped_model["SOURCE_LABEL"] = self.source.__primarylabel__
@@ -415,6 +439,7 @@ class BaseRelationship(CommonModel):  # pyre-ignore[13]
         if not target_labels:
             if (
                 hasattr(target_type, "__primarylabel__")
+                and target_type
                 and target_type.__primarylabel__
             ):
                 target_labels = [target_type.__primarylabel__]
@@ -422,22 +447,22 @@ class BaseRelationship(CommonModel):  # pyre-ignore[13]
         if not source_labels:
             if (
                 hasattr(source_type, "__primarylabel__")
+                and source_type
                 and source_type.__primarylabel__
             ):
                 source_labels = [source_type.__primarylabel__]
 
-        if not source_labels or not target_labels:
-            from neontology.utils import get_node_types
+        from neontology.utils import get_node_types
 
-            if not target_labels:
-                # return concrete subclasses of the abstract node class given
-                retrieved_node_types = get_node_types(target_type)
-                target_labels = list(retrieved_node_types.keys())
+        if not target_labels and target_type:
+            # return concrete subclasses of the abstract node class given
+            retrieved_node_types = get_node_types(target_type)
+            target_labels = list(retrieved_node_types.keys())
 
-            if not source_labels:
-                # return concrete subclasses of the abstract node class given
-                retrieved_node_types = get_node_types(source_type)
-                source_labels = list(retrieved_node_types.keys())
+        if not source_labels and source_type:
+            # return concrete subclasses of the abstract node class given
+            retrieved_node_types = get_node_types(source_type)
+            source_labels = list(retrieved_node_types.keys())
 
         schema = RelationshipSchema(
             name=rel_type,
